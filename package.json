@@ -1,0 +1,15 @@
+{"name":"sqool",
+ "version":"0.7.0",
+ "description": "A php database-abstraction layer that takes the pain out of storing objects in the database. ",
+ "keywords": ["php", "sql", "database", "orm", "dba", "mysql"],
+ "dependencies":{
+ },
+ "devDependencies": {
+ },
+ "repository": {
+   "type": "git",
+   "url": "git://github.com/fresheneesz/Sqool"
+ },
+ "scripts": {
+ }
+}

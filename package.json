@@ -1,5 +1,5 @@
 {"name":"sqool",
- "version":"0.6.0",
+ "version":"0.8.0",
  "description": "A php database-abstraction layer that takes the pain out of storing objects in the database. ",
  "keywords": ["php", "sql", "database", "orm", "dba", "mysql"],
  "dependencies":{

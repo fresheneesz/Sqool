@@ -1,9 +1,7 @@
 <?php
-require_once('../sqoolUnitTester.php');
-require_once("../prettyTree.php");
-require_once('SQOOL-0.7.php');
-cept::$html = true;
-
+require_once('sqoolUnitTester.php');
+require_once("prettyTree.php");
+require_once('SQOOL_0.6.php');
 
 $bangalore=false;
 function getchar()
@@ -14,8 +12,6 @@ function getchar()
 /*	tests to do:
 	* test adding a column to the class def (and using it)
 		* test adding a list column - since this has special needs (lists are initialized as null, and when they are first used an ID needs to be given for the list the proper tables may need to be created)
-	* test syntax errors in fetch
-    * test data inconsistency errors (what if the list table is dropped, what if an object has a list id that doesn't exist in the lists table)
 */
 
 //sqool::debug(true); // this will print out all the SQL queries that run
@@ -89,9 +85,7 @@ class metamorph extends sqool
 	}
 	
 	public function clear()
-	{	$sqool = new ReflectionClass('sqool');
-		$sqool->getProperty('classes')->setAccessible(true);
-		$sqool->setStaticPropertyValue('classes', array());
+	{	self::clearClasses();
 	}
 }
 
@@ -239,16 +233,11 @@ function defined_in_table($db, $table, $areIn, $areNotIn)
 }
 
 
-class SqoolTests extends SqoolUTester 
-{	static function testUtilityMethods()
+class sqoolTests extends sqoolUTester 
+{	function testUtilityMethods()
 	{	$x = array(1,2,3,4);
 		
-		try 
-		{	$y = sqool::array_insert($x, 2, "BOO");
-		} catch(ErrorException $e) 
-		{	echo "WOH AN EXCEPTION: \n";
-			print_r($e);
-		}
+		$y = sqool::array_insert($x, 2, "BOO");
 		print_r($y);
 		self::assert($y[0] === 1);
 		self::assert($y[1] === 2);
@@ -260,39 +249,11 @@ class SqoolTests extends SqoolUTester
 	function testFetchOnNonExistantDB()
 	{	
 		$a = sqool::connect("root", "", "garboNonExistant");	// connect to a database that doesn't exist (connects on localhost)
-        $arf = new objWithPrimitives();
-		$a->insert($arf);   // insert an object
-
-        // build a list of databases
-        $result = $a->sql("show databases")->result;
-        $existingDatabases = array();
-        foreach($result[0] as $i)
-        {   $existingDatabases[] = $i[0];
-        }
-        self::assert(in_array("garbononexistant", $existingDatabases));    // make sure database exists
-
-        print_r($existingDatabases);
-
 		$a->rm();
-
-        // build the list of databases again
-        $result = $a->sql("show databases")->result;
-        $existingDatabases = array();
-        foreach($result[0] as $i)
-        {   $existingDatabases[] = $i[0];
-        }
-        self::assert( ! in_array("garbononexistant", $existingDatabases)); // make sure database was removed
-        print_r($existingDatabases);
-        /*if($result)
-        {   printf("Select returned %d rows.\n", $result->num_rows);
-            print_r($result);
-        } else            
-        {   printf("Error: %s\n", $con->error);
-        }*/
-
-
 		
-		$a->fetch("nonExistantClass");
+		$a->fetch(array
+		(	"nonExistantClass"
+		));
 		
 		self::assert
 		(	is_array($a->nonExistantClass)
@@ -307,7 +268,9 @@ class SqoolTests extends SqoolUTester
 		$arf = new objWithPrimitives();
 		$arf2 = $a->insert($arf);
 		
-		$a->fetch("objWithPrimitives");
+		$a->fetch(array
+		(	"objWithPrimitives"
+		));
 		
 		self::assert(count($a->objWithPrimitives) === 1);
 		self::assert($a->objWithPrimitives[0]->boolTest === false);
@@ -325,7 +288,9 @@ class SqoolTests extends SqoolUTester
 	{	$a = setupTestDatabase();
 		
 		
-		$a->fetch("objWithPrimitives");
+		$a->fetch(array
+		(	"objWithPrimitives"
+		));
 		
 		self::assert(count($a->objWithPrimitives) === 3);
 		self::assert($a->objWithPrimitives[0]->boolTest === true);
@@ -401,7 +366,9 @@ class SqoolTests extends SqoolUTester
 		$arfAgain->doubletest = 1;	
 		$arfAgain->save();
 		
-		$a->fetch("objWithPrimitives");
+		$a->fetch(array
+		(	"objWithPrimitives"
+		));
 		
 		
 		self::assert(count($a->objWithPrimitives) === 2);
@@ -468,7 +435,7 @@ class SqoolTests extends SqoolUTester
 		self::assert($a->objWithPrimitives[0]->floattest === 4.435);
 		self::assert($a->objWithPrimitives[0]->doubletest === 5.657);
 		
-		$a->fetch("objWithPrimitives");
+		$a->fetch(array("objWithPrimitives"));
 		self::assert(count($a->objWithPrimitives) === 2);
 		self::assert($a->objWithPrimitives[0]->boolTest === true);
 		self::assert($a->objWithPrimitives[0]->stringTest1 === "pices of a drem");
@@ -480,7 +447,19 @@ class SqoolTests extends SqoolUTester
 		self::assert($a->objWithPrimitives[0]->floattest === 4.435);
 		self::assert($a->objWithPrimitives[0]->doubletest === 5.657);
 		
-		$a->fetch("objWithPrimitives comment");
+		$a->fetch(array("objWithPrimitives"));
+		self::assert(count($a->objWithPrimitives) === 2);
+		self::assert($a->objWithPrimitives[0]->boolTest === true);
+		self::assert($a->objWithPrimitives[0]->stringTest1 === "pices of a drem");
+		self::assert($a->objWithPrimitives[0]->stringTest2 === "Shanks you");
+		self::assert($a->objWithPrimitives[0]->stringTest3 === "TRY\" '' ~~");
+		self::assert($a->objWithPrimitives[0]->tinyintTest === 100);
+		self::assert($a->objWithPrimitives[0]->inttest === 500);
+		self::assert($a->objWithPrimitives[0]->biginttest === 600);
+		self::assert($a->objWithPrimitives[0]->floattest === 4.435);
+		self::assert($a->objWithPrimitives[0]->doubletest === 5.657);
+		
+		$a->fetch(array("objWithPrimitives", "comment"));
 		self::assert(count($a->objWithPrimitives) === 2);
 		self::assert($a->objWithPrimitives[0]->boolTest === true);
 		self::assert($a->objWithPrimitives[0]->stringTest1 === "pices of a drem");
@@ -493,10 +472,8 @@ class SqoolTests extends SqoolUTester
 		self::assert($a->objWithPrimitives[0]->doubletest === 5.657);
 		self::assert(count($a->comment) === 3);
 		self::assert($a->comment[0]->name === "your mom");
-
-        $a = sqool::connect("root", "", "garboNonExistant");	// reset $a
-
-		$a->fetch("objWithPrimitives[] comment[]");
+		
+		$a->fetch(array("objWithPrimitives"=>array(), "comment"=>array()));
 		self::assert(count($a->objWithPrimitives) === 2);
 		self::assert($a->objWithPrimitives[0]->boolTest === true);
 		self::assert($a->objWithPrimitives[0]->stringTest1 === "pices of a drem");
@@ -509,8 +486,8 @@ class SqoolTests extends SqoolUTester
 		self::assert($a->objWithPrimitives[0]->doubletest === 5.657);
 		self::assert(count($a->comment) === 3);
 		self::assert($a->comment[0]->name === "your mom");
-
-		$a->fetch("objWithPrimitives[members: boolTest] comment[]");
+		
+		$a->fetch(array("objWithPrimitives"=>array("members"=>array("boolTest")), "comment"=>array()));
 		self::assert(count($a->objWithPrimitives) === 2, "So apparently ".count($a->objWithPrimitives)." doesn't pass for 2 these days");
 		self::assert($a->objWithPrimitives[0]->boolTest === true);
 		self::assert(gotCeptFromInvalidAccess($a->objWithPrimitives[0], "stringTest1"));
@@ -519,23 +496,22 @@ class SqoolTests extends SqoolUTester
 		self::assert($a->comment[0]->name === "your mom");
 		
 		
-		$a->fetch("objWithPrimitives[members: boolTest stringTest2] comment[members:name]");
+		
+		$a->fetch(array( "objWithPrimitives"=>array("members"=>array("boolTest", "stringTest2")), "comment"=>array("members"=>array("name")) ));
 		self::assert(count($a->objWithPrimitives) === 2);
 		self::assert($a->objWithPrimitives[0]->boolTest === true);
 		self::assert($a->objWithPrimitives[0]->stringTest2 === "Shanks you");	
 		self::assert(gotCeptFromInvalidAccess($a->objWithPrimitives[0], "stringTest1"));
 		
 		self::assert(count($a->comment) === 3);
-		self::assert($a->comment[0]->name === "your mom");
-		self::assert(gotCeptFromInvalidAccess($a->comment[0], "time"));
+		self::assert($a->comment[0]->name === "your mom");		
 	}
 	
 	function testFetch2()
 	{	$a = setupTestDatabase();
 		sqool::debug(false);
 		
-		$booObj = $a->fetch("objWithPrimitives[cond: id=1]");
-        $booObj = $booObj[0];
+		$booObj = $a->fetch("objWithPrimitives", 1);
 		$booObj->fetch();
 		
 		self::assert($booObj->boolTest === true);
@@ -562,9 +538,8 @@ class SqoolTests extends SqoolUTester
 		self::assert($booObj->floattest === 4.435);
 		self::assert($booObj->doubletest === 5.657);
 		
-		$booObj = $a->fetch("objWithPrimitives[cond: id=2]");
-		$booObj = $booObj[0];
-        $booObj->fetch();
+		$booObj = $a->fetch("objWithPrimitives", 2);
+		$booObj->fetch();
 		
 		self::assert($booObj->boolTest === false);
 		self::assert($booObj->stringTest1 === "drankFu");
@@ -577,18 +552,18 @@ class SqoolTests extends SqoolUTester
 		self::assert($booObj->doubletest === 11.890890);
 		
 		
-		$booObj = $a->fetch("objWithPrimitives[cond: id=1]");
-		$booObj = $booObj[0];
-        $booObj->fetch("boolTest");
+		$booObj = $a->fetch("objWithPrimitives", 1);
+		$booObj->fetch("boolTest");
 		
 		self::assert($booObj->boolTest === true);
+		self::assert(gotCeptFromInvalidAccess($booObj, "stringTest1"));
 		
 		
 		
 		// sort test
 		
 		
-		$a->fetch("objWithPrimitives[range: 1 1]");
+		$a->fetch(array("objWithPrimitives"=>array("ranges"=>array(1,1))));
 		
 		self::assert(count($a->objWithPrimitives) === 1);
 		
@@ -603,21 +578,22 @@ class SqoolTests extends SqoolUTester
 		self::assert($a->objWithPrimitives[0]->doubletest === 11.890890);
 		
 		
-		$a->fetch("objWithPrimitives[sort asc: inttest]");
+		$a->fetch(array("objWithPrimitives"=>array("sort"=>array(sqool::a, "inttest"))));
 		
 		self::assert(count($a->objWithPrimitives) === 3);
 		self::assert($a->objWithPrimitives[0]->inttest < $a->objWithPrimitives[1]->inttest);
 		self::assert($a->objWithPrimitives[1]->inttest < $a->objWithPrimitives[2]->inttest);
 		
-		$a->fetch("objWithPrimitives[sort asc: inttest floattest]");
+		$a->fetch(array("objWithPrimitives"=>array("sort"=>array(sqool::a, "inttest", "floattest"))));
+		
 		
 		// cond test
 		
-		$a->fetch("objWithPrimitives[where: tinyintTest =",33,"]");
+		$a->fetch(array("objWithPrimitives"=>array("cond"=>array("tinyintTest =",33))));
 		self::assert(count($a->objWithPrimitives) === 1);
 		self::assert($a->objWithPrimitives[0]->tinyintTest === 33);
 		
-		$a->fetch("objWithPrimitives[cond: tinyintTest >",33,"&& inttest <", 400,"]");
+		$a->fetch(array("objWithPrimitives"=>array("cond"=>array("tinyintTest >",33,"&& inttest <", 400))));
 		self::assert(count($a->objWithPrimitives) === 1);
 		self::assert($a->objWithPrimitives[0]->tinyintTest === 77);
 		self::assert($a->objWithPrimitives[0]->inttest === 88);
@@ -662,10 +638,10 @@ class SqoolTests extends SqoolUTester
 		self::assert($insertedEgg->intVar === 9);
 		self::assert($insertedEgg->child->intVar === 5);
 		
-		$boo1 = $a->fetch("objWithPrimitives[cond: id=1]");
+		$boo1 = $a->fetch("objWithPrimitives", 1);
 		
 		$egg3 = new objB();
-		$egg3->bob_ject = $boo1[0];
+		$egg3->bob_ject = $boo1;
 		$egg3->intVar = 9;
 		$insertedEgg = $a->insert($egg3);
 		
@@ -684,8 +660,7 @@ class SqoolTests extends SqoolUTester
 		
 		$insertedEgg->bob_ject->stringTest2 = "bizarroooo";
 		$insertedEgg->bob_ject->save();
-		$boo1 = $a->fetch("objWithPrimitives[cond: id=1]");
-        $boo1 = $boo1[0];
+		$boo1 = $a->fetch("objWithPrimitives", 1);
 		$boo1->fetch();
 		self::assert($boo1->stringTest2 === "bizarroooo");
 		
@@ -725,18 +700,17 @@ class SqoolTests extends SqoolUTester
 		
 		echo "fetching<br>";
 		
-		$objB2 = $a->fetch("objB[cond: id=2]");
-		$objB2 = $objB2[0];
-        $objB2->fetch('
-			intVar
-			child
-		');
+		$objB2 = $a->fetch("objB", 2);
+		$objB2->fetch(array
+		(	"intVar",
+			"child"
+		));
 		
 		self::assert($objB2->intVar == 9);
 		self::assert($objB2->child->intVar == 5);
 		
 		// The following selects all objB objects (should be 6 or so of them) and attempts to get the object-member child from each of them
-		$a->fetch("objB[members:child]");
+		$a->fetch(array("objB"=>array("members"=>array("child"))));
 		
 		self::assert(count($a->objB) == 6);
 			self::assert($a->objB[0]->id === 1);
@@ -766,7 +740,7 @@ class SqoolTests extends SqoolUTester
 		
 		
 		// The following selects all objB objects (should be 6 or so of them) and attempts to get a couple different object-members from each of them
-		$a->fetch("objB[members: bob_ject child intVar]");
+		$a->fetch(array("objB"=>array("members"=>array("bob_ject", "child", "intVar"))));
 		
 		self::assert(count($a->objB) == 6);
 		self::assert(get_class($a->objB[0]->bob_ject) === "objWithPrimitives");
@@ -818,20 +792,15 @@ class SqoolTests extends SqoolUTester
 		self::assert($insertedEgg->bob_ject === null);
 		self::assert(get_class($insertedEgg->child) === "objB");
 		
-		$insertedEgg->child = null; //set member back to null
+		$insertedEgg->child = null;
 		$insertedEgg->save();
 		
 		$insertedEgg->fetch();
 		self::assert($insertedEgg->intVar === 89);
 		self::assert($insertedEgg->bob_ject === null);
 		self::assert($insertedEgg->child === null);
-
-        $objBs = $a->fetch("objB[cond: bob_ject != null]");
-        $objBs[0]->bob_ject = null;
-        $objBs[0]->save();
-
-
-		$a->fetch("objB[members: bob_ject]");
+		
+		$a->fetch(array("objB"=>array("members"=>array("bob_ject"))));
 		print_r($a);
 		getchar();
 		foreach($a->objB as $c)
@@ -885,13 +854,13 @@ class SqoolTests extends SqoolUTester
 		$lo1->x = 71;
 		$lo1->y = array();
 		$newLo1 = $a->insert($lo1);
-
-        // commented out because I want/need to test insert first
-        //$newLo1->fetch();
-        //self::assert($newLo1->x === 71);
-        //self::assert($newLo1->y === array());
-
 		
+		$lo2 = new listContainer();
+		$lo2->x = 72;
+		$lo2->y = array("hello");
+		$newLo2 = $a->insert($lo2);
+		
+		/*
 		$lo2 = new listContainer();
 		$lo2->x = 72;
 		$lo2->y = array("hello");
@@ -910,7 +879,7 @@ class SqoolTests extends SqoolUTester
 		$lo4->x = 74;
 		$lo4->y = array("fusikins", "doolettuce");
 		$lo4->z = array($lo1, $lo2, $lo3);
-
+		*/
 		throw new cept("gah");
 		
 		echo "here<br>";
@@ -918,53 +887,9 @@ class SqoolTests extends SqoolUTester
 		var_dump($newLo1);
 		
 	}
-
-    function testErrors()
-    {   $a = sqool::connect("root", "", "garboNonExistant");	// connect to a database that doesn't exist (connects on localhost)
-        $a->rm();
-
-        $arf = new objWithPrimitives();
-        $arf->boolTest = 1;
-        $arf->stringTest1 = true;
-        $arf->stringTest2 = 23;
-        $arf->stringTest3 = 34.532;
-        $arf->tinyintTest = 123456;
-        $arf->inttest = "testing";
-        $arf->biginttest = "test";
-        $arf->floattest = "test";
-        $arf->doubletest = "test";
-
-        $arf2 = new objWithPrimitives();
-        $arf2->boolTest = "testing";
-        $arf2->stringTest1 = "drankFu";
-        $arf2->stringTest2 = "lets go";
-        $arf2->stringTest3 = "Try2\" '' ~~";
-        $arf2->tinyintTest = "testerizer";
-        $arf2->inttest = 44.34;
-        $arf2->biginttest = 555.234;
-        $arf2->floattest = 5.6665;
-        $arf2->doubletest = 11.890890;
-
-        $arf3 = new objWithPrimitives();
-        $arf3->boolTest = false;
-        $arf3->stringTest1 = "dtaFoo";
-        $arf3->stringTest2 = "lets show em up";
-        $arf3->stringTest3 = "bastazx2\" '' ~~";
-        $arf3->tinyintTest = 77;
-        $arf3->inttest = 88;
-        $arf3->biginttest = 1111;
-        $arf3->floattest = 2436.2345;
-        $arf3->doubletest = 2345325.43;
-
-        $a->insert($arf);
-        $a->insert($arf2);
-        $a->insert($arf3);
-
-        throw new cept("something should be thrown");
-    }
 }
 
-SqoolTests::run();
+sqoolTests::run();
 
 //$fp = fopen('php://stdin', 'r');
 //fgets($fp, 2);

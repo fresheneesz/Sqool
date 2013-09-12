@@ -11,7 +11,7 @@
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more details.	
 */
 
-include_once(dirname(__FILE__)."/../cept.php");	// exceptions with stack traces
+include_once(dirname(__FILE__)."/cept.php");	// exceptions with stack traces
 
 
 
@@ -55,8 +55,8 @@ include_once(dirname(__FILE__)."/../cept.php");	// exceptions with stack traces
 			* id					the ID of the object
 			* MEMBER				example field-name of a member named "MEMBER". 
 									If this is a primitive, it will hold a value. 
-									If this is a list or object, it will hold an ID. Objects are treated as references - they all start with a null id (note this is not the same as ID 0). 
-		* list					table that holds all the lists in the database (Entry id 0 has list_id 0 and the object_id instead represents the next list_id to use. object_id 0 is incremented for every new list)
+									If this is a list or object, it will hold an ID. Objects are treated as references - they all start with a null id (note this is not the same as ID 0).
+		* list					table that holds all the lists in the database (Entry id 0 has list_id 0 and the object_id instead represents the next list_id to use. object_id 0 is incrimented for every new list)
 			* id					the id of each list-entry (Not strictly used right now)
 			* list_id				the ID of the list that owns the object
 			* object_id				the ID of the object/primitive that the list owns
@@ -86,9 +86,6 @@ include_once(dirname(__FILE__)."/../cept.php");	// exceptions with stack traces
 		* don't execute fetches for data that already exists
 			* keep track of what objects have been fetched and sync them (objects that point to the same row in the db should point to the same obejct in the php)
 			* write a refetech method to fetch data even if it has already been fetched
- 			* I disagree about this now, because sometimes you need consistent data and automatically updating certain parts
-				when other parts of the code have them updated could lead to problems.
-				Plus its more complicated
 		* make sure case is lowered for all internal names
 		* Make sure you lower the case of all member names and classnames as they come in
 		* have a facility for limiting operations that can be done on an object (allowOnly and disallow should be mutually exclusive). Make sure the mechanism can't affect internal behaviors (for example the insert call using create table or whatever)
@@ -132,7 +129,7 @@ include_once(dirname(__FILE__)."/../cept.php");	// exceptions with stack traces
 		* A book called High performance mysql explained you can use "the ODRER BY SUBSTRING(column, length) trick to convert the values to character strings, which will permit in-memory temporary tables
 */
 
-/*	List of optimizations (that are already done):
+/*	List of optimizations:
 		* Lazy database connection - the database is not connected to until a query needs to be processed
 		* Lazy database/table/column creation - things are created only after they could not be found (that way there needs be no code that checks to make sure the db/table/column is there before asking for it or writing to it)
 		* using queue and go pack all the queries into one network request, thereby minimizing flight time
@@ -245,14 +242,14 @@ class sqool			// connection to a database
 	}
 	
 	private static $startingTypes = array	// this is used to initialize the private member $classes
-	(	"bool"      =>array("name"=>"bool",	   "definition"=>array("value"=>array("baseType"=>"bool"))),
-		"string"    =>array("name"=>"string",  "definition"=>array("value"=>array("baseType"=>"string"))),
-		"tinyint"   =>array("name"=>"tinyint", "definition"=>array("value"=>array("baseType"=>"tinyint"))),
-		"int"       =>array("name"=>"int",	   "definition"=>array("value"=>array("baseType"=>"int"))),
-		"bigint"    =>array("name"=>"bigint",  "definition"=>array("value"=>array("baseType"=>"bigint"))),
-		"float"     =>array("name"=>"float",   "definition"=>array("value"=>array("baseType"=>"float"))),
-		"double"    =>array("name"=>"double",  "definition"=>array("value"=>array("baseType"=>"double"))),
-		"list"      =>array("name"=>"list",	   "definition"=>array("list_id"=>array("baseType"=>"int"), "object_id"=>array("baseType"=>"int")))
+	(	"bool"=>array("name"=>"bool",	"definition"=>array("value"=>array("baseType"=>"bool"))),
+		"string"=>array("name"=>"string",	"definition"=>array("value"=>array("baseType"=>"string"))),
+		"tinyint"=>array("name"=>"tinyint","definition"=>array("value"=>array("baseType"=>"tinyint"))),
+		"int"=>array("name"=>"int",	"definition"=>array("value"=>array("baseType"=>"int"))),
+		"bigint"=>array("name"=>"bigint",	"definition"=>array("value"=>array("baseType"=>"bigint"))),
+		"float"=>array("name"=>"float",	"definition"=>array("value"=>array("baseType"=>"float"))),
+		"double"=>array("name"=>"double",	"definition"=>array("value"=>array("baseType"=>"double"))),	
+		"list"=>array("name"=>"list",	"definition"=>array("list_id"=>array("baseType"=>"int"), "object_id"=>array("baseType"=>"int")))
 	);	
 	
 	private static $operations = array();
@@ -496,7 +493,7 @@ class sqool			// connection to a database
 			);
 			
 			// insert object operations
-			$result = $this->PHPvalToSqoolVal($baseType, $item, $fieldToUpdate, "listItem");
+			$result = $this->PHPvalToSqoolVal($sqoolType, $sqoolVal, $fieldToUpdateAfterInsert, "listItem");
 			
 			$operations = array_merge($operations, $result["ops"]);
 		}
@@ -507,25 +504,7 @@ class sqool			// connection to a database
 	// to use the '__set' magic function in child classes, use ___set (with three underscores instead of two)
 	function __set($name, $value)
 	{	$this->validateNOTRoot("You can't set member variables of a Sqool object that represents the database");
-
-        // validate the type
-        $thisClassName = self::getFrontEndClassName($this);
-		$memberDefinition = self::getClassDefinition($thisClassName);
-        if(array_key_exists("listType", $memberDefinition[$name]))
-        {   if(gettype($value) !== "array")
-            {   throw new cept("Attempting to set array field (".$name.") as a".gettype($value));
-            }
-        }else if(in_array($memberDefinition[$name]["baseType"], array_keys(self::primitives())) )
-        {   if(in_array(gettype($value), array("object", "array")) || $value === null)
-            {   throw new cept("Attempting to set ".$memberDefinition[$name]["baseType"]." field (".$name.") as a ".gettype($value));
-            }
-        } else
-        {   if($value !== null && gettype($value) !== "object")
-            {   throw new cept("Attempting to set object field (".$name.") as a ".gettype($value));
-            }
-        }
-
-
+		
 		if($name == 'id')
 		{	throw new cept("You can't manually set the object's id. Sorry.");
 		}else if( false == $this->containsMember($name) )
@@ -578,149 +557,14 @@ class sqool			// connection to a database
 	// Note: if a member is a class type object, it will be NULL if it doesn't point to any object
 	// throws an error if an invalid member is accessed (if a non-existant member is attempted to be accessed)
 	/*	
-		object->fetch()		// fetches all the members of the object (but does not fetch members of object-members). If its the root object, fetches the whole database.
+		object->fetch(membersSelection);
 		// OR
-		object->fetch("<memberList>");
-	    // OR
-	    object->fetch("<className>", <id>); // returns an object with a connection and an ID (makes no call to the database server) 	
+		object->fetch("memberName");	// fetch a single member without any options (in the case of the root object, it fetches an array of every object of that type)
+		// OR
+		rootObject->fetch("className", objectID);	// fetches a single object of a given class (the calling object must be the root object) - this returns the object fetched with all its data)
+		// OR
+		nonRootObject->fetch()		// fetches all the members of the object (but does not fetch members of object-members)
 		
-		// <memberList> represents a list of members that may or may not have associated dataControls. Eg:
-			memberName memberName2 etc
-			// or
-			memberName[<dataControl>] memberName2[<dataControl2>] etc[<etcControl>]
-			// or a mix:
-			memberName membername2 memberName3[<dataControl>] etc[<etcControl>]
-			
-					
-		// <dataControl> represents the following:
-			members: <memberList>	
-			cond: <expression>
-			sort <direction>: member1 member2 member3  <direction>: memberetc
-			range: 0:10 34:234
-			
-			// members: the list of members to fetch for this object (and their dataControls)
-				// members without data controls are fetched with all their members (but all those member don't have their members fetched) (in the case of the root object, it fetches an array of every object of that type)
-				// if the object member being selected by this memberDataControl set is a list, the "members" array controls the returned members for each element of the list
-			// -- The following three only apply if the member is a list: --
-			// cond: conditions on selecting items in a list
-			// sort: used only for a list - how to sort the list
-				// <direction> can either be 'asc' or 'desc' - whenever a direction is written, it changes the direction subsequent fields are sorted
-					// e.g. in "sort desc: fieldA fieldB  asc: fieldC", fieldA and fieldB are sorted descending, and fieldC is sorted ascending		
-			// ranges: used for selecting a slice of the list to fetch (after being sorted)
-			
-		
-		
-		// <expression> represents a boolean or mathematical expression (ie a where clause)
-		// The sql condition set:
-			//	`x` > '5' AND `y` < '3' AND (`x` = `y` OR `y`*'5' >= `x`*`z`)
-			//	would be written in sqool as:
-			//	x > ',5,'&& y <',3,'&& (x=y || y*',5,'>= x * z )
-	*/
-	public function fetch( /*$fetchOptions ) OR fetch($className) OR fetch($className, $id*/ )
-	{	$args = func_get_args();
-        $hasFetchOptions = false;
-    
-		if(count($args) == 0)
-		{	if($this->isRoot())
-			{	throw new cept("Sqool doesn't support fetching the entire database by calling 'fetch' without arguments yet.");
-			}else
-			{	$mode = "members";
-				$ID = $this->id;
-				$className = self::getFrontEndClassName($this);
-				$objectRef = array($this);
-			}
-		}
-		else
-		{	$stringFetchOptions = self::mergeStringFetchOptions($args);
-
-            if($this->isRoot())
-			{	$mode = "tables";
-			}else
-			{	$this->requireID("fetch from");
-
-				$mode = "members";
-				$hasFetchOptions = true;
-				$ID = $this->id;
-				$className = self::getFrontEndClassName($this);
-				$objectRef = array($this);
-			}
-
-            $fetchOptions = self::stringFetchOptionsToArrays($stringFetchOptions);
-		}
-
-		if($this->databaseRootObject->queueFlag === false)
-		{	$this->databaseRootObject->queue();
-			$goImmediately = true;
-		}else
-		{	$goImmediately = false;
-		}
-
-		//$fetchOptions = $this->membersToKeyValue($firstArg);
-
-		if($mode == "tables")	// if this is the root
-		{	foreach($fetchOptions as $k=>$v)
-			{	foreach($this->createFetchOperation($k, $v, array($this, $k), "tables") as $o)
-				{	$this->databaseRootObject->addToCallQueue($o);	// insert the calls into the callQueue
-				}
-			}
-		}else
-		{	// translate into the uniform fetch form
-
-			$mainOptions = array
-			(	"cond"=>array(self::getClassPrimaryKey($className)."=",$ID),
-				"ranges"=>array(0,0)	// only return the first item found (since there can only be one)
-			);
-			if($hasFetchOptions)
-			{	$mainOptions["members"] = $fetchOptions;
-			}
-
-			foreach($this->databaseRootObject->createFetchOperation($className, $mainOptions, $objectRef, "members") as $o)
-			{	$this->databaseRootObject->addToCallQueue($o);	// insert the calls into the callQueue
-			}
-		}
-
-		if($goImmediately)
-		{	$this->databaseRootObject->go();
-		}
-
-        if(isset($fetchOptions) && count($fetchOptions) === 1)
-        {   $fetchOptionsArraykeys = array_keys($fetchOptions);
-            $objectBeingFetched = $fetchOptionsArraykeys[0];
-            return $this->setVariables[$objectBeingFetched];
-        }
-	}
-
-    // concatenates toegether the fetch arguments, transforming every other argument into safe-input
-    private function mergeStringFetchOptions($fetchArguments)
-    {   $result = "";
-
-        $even = true;
-        foreach($fetchArguments as $arg)
-        {   if($even)
-            {   $result .= $arg;
-            }
-            else
-            {   $argType = gettype($arg);
-                if($argType === "string")
-                {   $result .= "'".self::escapeString($arg)."'";
-                } else if($argType === "object" && $arg instanceof sqool)
-                {   $result .= $arg->id;    // a sqool object is represented by it's id
-                } else if($arg === null)
-                {   $result .= "null";
-                } else
-                {   $result .= $arg;
-                }
-            }
-
-            $even = !$even;
-        }
-
-        return $result;
-    }
-
-
-
-    /*	returns a memberSelection array
 		// membersSelection represents the following:
 		array
 		(	"memberNameA"=>memberDataConrolA,	// the key is the member name, the value is the data control
@@ -731,26 +575,26 @@ class sqool			// connection to a database
 			"memberNameD"
 			//etc...
 		),
-
+		
 		// memberDataControl represents the following:
 		array
 		(	// if the object member being selected by this memberDataControl set is a list, the "members" array controls the returned members for each element of the list
 			"members" => membersSelection,
-
+				
 			// if a key in "members" is a list, the following keys apply to the array that key points to:
 			// for fields that are objects, the 'value' is a sqool object instance
-			// the "sort", "cond", and "ranges" keys are optional
+			// the "sort", "cond", and "ranges" keys are optional 
 			"sort" => array(direction, fieldArrayOrDirection, fieldArrayOrDirection, etc),	// the way to sort the elements of a member list
 				// direction should be either sqool::a or sqool::ascend for ascending [smallest first], and sqool::d or sqool::descend for descending [largest first]
 					// whenever a direction is written, it changes the direction subsequent fields are sorted
 						// e.g. in "sort" => array(sqool::d, "fieldA", "fieldB", sqool::a, "fieldC")  fieldA and fieldB are sorted descending, and fieldC is sorted ascending
 				// a field should just be a string holding the field name
 				// a string inside an array is treated as a raw SQL string to insert into the sort conditions
-
+			
 			"cond" => expression, 									// the elements of a member list selected by some kind of conditions on the elements of the list
 			"ranges" => array(start, end, start2, end2, etc, etc)	// objects to return from the selected list by their position in the list (after being sorted).
 		)
-
+		
 		// expression represents a boolean or mathematical expression
 		// op is any non-alphanumeric string (sqool does not support alphanumeric operators like "LIKE" or "XOR" - use "&&" and "||" instead of "AND" and "OR")
 		//		examples of an 'op': "&& ", "||", ">", "<", "=", etc
@@ -764,7 +608,7 @@ class sqool			// connection to a database
 		// as in the above example, a 'value' parameter slot (array members with an odd index in an expression) can be replaced with an expression, allowing it to represent a sqool object member
 		// the following is the syntax of an expression:
 		array
-		(	"field op", value1, "",
+		(	"field op", value1, "", 
 			"op field2 op", value2,
 			"op field3 op", value3, // etc
 			// OR
@@ -774,480 +618,85 @@ class sqool			// connection to a database
 			// OR
 			array("raw"=>sqlExpression)
 			// OR a mix
-		)
+		)	
 	*/
-    private static function stringFetchOptionsToArrays($stringFetchOptions)
-    {   $position = 0;
-        $result = self::parseFetchMemberList($stringFetchOptions, $position);
-        if($position != strlen($stringFetchOptions)) 
-        {   throw new cept("Parse failure in fetch options: ".$stringFetchOptions);
-        }
-        return $result;
-    }
-
-
-
-
-    // returns the result, and sets $endPosition
-    private static function parseFetchMemberList($stringFetchOptions, &$curPosition)
-    {   $result = array();
-        $currentPosition = $curPosition;
-        while(true) // loop through members in memberList
-        {   self::parseWhiteSpace($stringFetchOptions, $currentPosition); // ignore preceding whitespace
-            $currentResult = self::parseFetchMember($stringFetchOptions, $currentPosition, $currentPosition);
-            if($currentResult === null)
-            {   break;
-            } else
-            {   $result = array_merge($result, $currentResult);
-            }
-        }
-        $curPosition = $currentPosition;
-        return $result;
-    }
-
-    // translates this:
-    /* 		memberName
-			// or
-			memberName[<dataControl>]
-     */
-    // into this:
-    /*  array
-		(	"memberName"=>array()
-            // or
-			"memberName"=><dataControl>
-		)
-     */
-    // returns null if the endPosition doesn't increment
-    private static function parseFetchMember($stringFetchOptions, $startPosition, &$endPosition)
-    {   $currentPosition = null;  // will be overwritten in parseWhiteSpace
-        $memberName = self::parseVariableName($stringFetchOptions, $startPosition, $currentPosition);
-        if($memberName === null) {return null;}
-
-        if(self::parseConstantString('[', $stringFetchOptions, $currentPosition, $currentPosition) === null)
-        {   $endPosition = $currentPosition;
-            return array($memberName=>array());
-        }
-
-        $dataControl = self::parseDataControl($stringFetchOptions, $currentPosition, $currentPosition);
-        if($dataControl === null) {return null;}
-
-        if(self::parseConstantString(']', $stringFetchOptions, $currentPosition, $currentPosition) === null)
-        {   return null;
-        } else
-        {   $endPosition = $currentPosition;
-            return array($memberName=>$dataControl);
-        }
-    }
-
-    // translates this:
-    /* 		members: <memberList>
-			cond: <expression>
-			sort:  member1 member2 <direction>: member3  <direction>: memberetc
-			range: 0:10 34:234
-     */
-    // into this:
-    /* array
-		(	// if the object member being selected by this memberDataControl set is a list, the "members" array controls the returned members for each element of the list
-			"members" => membersSelection,
-
-			// if a key in "members" is a list, the following keys apply to the array that key points to:
-			// for fields that are objects, the 'value' is a sqool object instance
-			// the "sort", "cond", and "ranges" keys are optional
-			"sort" => array(direction, fieldArrayOrDirection, fieldArrayOrDirection, etc),	// the way to sort the elements of a member list
-				// direction should be either sqool::a or sqool::ascend for ascending [smallest first], and sqool::d or sqool::descend for descending [largest first]
-					// defaults to ascending
-                    // whenever a direction is written, it changes the direction subsequent fields are sorted
-						// e.g. in "sort" => array(sqool::d, "fieldA", "fieldB", sqool::a, "fieldC")  fieldA and fieldB are sorted descending, and fieldC is sorted ascending
-				// a field should just be a string holding the field name
-				// a string inside an array is treated as a raw SQL string to insert into the sort conditions
-
-			"cond" => expression, 									// the elements of a member list selected by some kind of conditions on the elements of the list
-			"ranges" => array(start, end, start2, end2, etc, etc)	// objects to return from the selected list by their position in the list (after being sorted).
-		)
-
-     */
-    private static function parseDataControl($stringFetchOptions, &$curPosition)
-    {   $currentPosition = $curPosition;
-        $result = array();
-
-        $notDoneYet = array('members'=>0, 'cond'=>0, 'sort'=>0, 'range'=>0);
-        while(true)
-        {   $word = self::getDataControlType($stringFetchOptions, $currentPosition);
-
-            if($word === null)
-            {   break;  // quit if there's no more valid words happening
-            }
-            if( ! in_array($word, array_keys($notDoneYet)))
-            {   return null;
-            }
-
-            if($word === 'members')
-            {   $members = self::parseFetchMemberList($stringFetchOptions, $currentPosition);
-                $result['members'] = $members;
-            } else if($word === 'cond')
-            {   $conditions = self::parseConditional($stringFetchOptions, $currentPosition);
-                $result['cond'] = array('raw'=>$conditions);
-            } else if($word === 'sort')
-            {   $sortList = self::parseSortList($stringFetchOptions, $currentPosition, $currentPosition);
-                $result['sort'] = $sortList;
-            } else if($word === 'range')
-            {   $range = self::parseRange($stringFetchOptions, $currentPosition);
-                $result['ranges'] = $range;
-            }
-
-            unset($notDoneYet[$word]);
-        }
-
-        $curPosition = $currentPosition;
-        return $result;
-    }
-        // returns the data control type from a DataControl string
-        private static function getDataControlType($stringFetchOptions, &$curPosition)
-        {   $currentPosition = $curPosition;
-            $word = self::parseVariableName($stringFetchOptions, $currentPosition, $currentPosition);
-
-            if($word === null)
-            {   return null;
-            }
-
-            // accept 'order by' in place of 'sort'
-            if($word === 'order')
-            {   $nextWord = self::parseVariableName($stringFetchOptions, $currentPosition, $currentPosition);
-                if($nextWord !== 'by')
-                {   return null;
-                } else
-                {   $word = 'sort';
-                }
-            }
-
-            if($word === 'where')
-            {   $word = 'cond';
-
-            }
-
-            if($word === 'sort')
-            {   $positionAfterSort = $currentPosition;
-                $nextWord = self::parseVariableName($stringFetchOptions, $positionAfterSort, $positionAfterSort);
-                if($nextWord === 'asc' || $nextWord === 'desc')
-                {   self::parseWhiteSpace($stringFetchOptions, $positionAfterSort); // ignore preceding whitespace
-                    if(self::parseConstantString(':', $stringFetchOptions, $positionAfterSort, $positionAfterSort) === null)
-                    {   return null;    // expected a :, got something else
-                    } else
-                    {   $curPosition = $currentPosition;
-                        return $word;
-                    }
-                }
-            }
-
-            // else
-            self::parseWhiteSpace($stringFetchOptions, $currentPosition); // ignore preceding whitespace
-            if(self::parseConstantString(':', $stringFetchOptions, $currentPosition, $currentPosition) === null)
-            {   return null;    // expected a :, got something else
-            }
-
-            if(in_array($word, array('members', 'cond', 'sort', 'range')))
-            {   $curPosition = $currentPosition;
-                return $word;
-            } else
-            {   return null;
-            }
-        }
-
-
-
-
-
-    // <expression> represents a boolean or mathematical expression (ie a where clause)
-    // The sql condition set:
-        //	`x` > 5 AND `y` < 3 AND (`x` = `y` OR `y`*5 >= `x`*`z`)
-        //	would be written in sqool as:
-        //	x > ',5,'&& y <',3,'&& (x=y || y*',5,'>= x * z )
-    private static function parseConditional($stringConditional, &$curPositionOut)
-    {   $currentPosition = $curPositionOut;
-        $finalResult = "";
-
-        // need to parse
-            // function calls
-            // strings (single and double quoted)
-            // word: (end condition)
-            // members
-            // end bracket (end condition)
-            // operators (ie any non alphanumeric characters)
-
-        while(true)
-        {   $result = self::parseFunctionLikeCall($stringConditional, $currentPosition);
-            if($result !== null) { $finalResult .= $result; continue; }
-
-            $result = self::parseString($stringConditional, $currentPosition);
-            if($result !== null) { $finalResult .= $result; continue; }
-
-            $dummy = $currentPosition; // make sure $currentPosition isn't changed
-            if(self::getDataControlType($stringConditional, $dummy) !== null)
-            {   break; // end condition
-            }
-
-            $result = self::parseSpecialConditionalSyntax($stringConditional, $currentPosition, $currentPosition);
-            if($result !== null) { $finalResult .= $result; continue; }
-
-            $result = self::parseVariableName($stringConditional, $currentPosition, $currentPosition);
-            if($result !== null) { $finalResult .= self::makeSQLnames($result); continue; }
-
-            if(self::parseConstantString("]", $stringConditional, $currentPosition, $currentPosition) !== null)
-            {   $currentPosition -= 1; // don't count the bracket
-                break;  // end condition
-            }
-
-            $result = self::getOtherChars($stringConditional, "]:_'\"=!", "azAZ", $currentPosition);
-            if($result !== null && $result !== '') { $finalResult .= $result; continue; }
-
-            //else
-            return null;    // didn't parse correctly, needs an end condition
-
-        }
-
-        $curPositionOut = $currentPosition;
-        return $finalResult;
-    }
-
-    // for right now, just changes "== null" and "!= null" to "is null" and "is not null"
-    private static function parseSpecialConditionalSyntax($theString, &$currentPositionOut)
-    {   $curPosition = $currentPositionOut;
-
-        self::parseWhiteSpace($theString, $curPosition); // ignore preceding whitespace
-        $result = self::getConstantString($theString, array("!=", "=="), $curPosition);
-        if($result !== null)
-        {   self::parseWhiteSpace($theString, $curPosition); // ignore preceding whitespace
-            $result = self::getConstantString($theString, array("null"), $curPosition);
-            if($result !== null)
-            {   $currentPositionOut = $curPosition;
-                return " is not null";
-            }
-        }
-
-        // otherwise just make sure to parse stray ! and = characters
-        $curPosition = $currentPositionOut;
-        $result = self::getConstantString($theString, array("!", "="), $curPosition);
-        $currentPositionOut = $curPosition;
-        return $result;
-    }
-
-    private static function parseFunctionLikeCall($theString, &$currentPositionOut)
-    {   $currentPosition = $currentPositionOut;
-        $result = "";
-
-        $variableName = self::parseVariableName($theString, $currentPosition, $currentPosition);
-        if($variableName === null)
-        {   return null;
-        }
-
-        self::parseWhiteSpace($theString, $currentPosition); // ignore preceding whitespace
-        if(self::parseConstantString("(", $theString, $currentPosition, $currentPosition) === null)
-        {   return null;
-        }
-
-        while(true)
-        {   $result .= self::parseConditional($theString, $currentPosition, $currentPosition);
-        }
-
-        self::parseWhiteSpace($theString, $currentPosition); // ignore preceding whitespace
-        if(self::parseConstantString(")", $theString, $currentPosition, $currentPosition) === null)
-        {   return null;
-        }
-
-        $currentPositionOut = $currentPosition;
-
-        return $result;
-    }
-
-    private static function parseString($theString, &$curPosition)
-    {   $currentPosition = $curPosition;
-        $result = "";
-        $length = count($theString);
-
-        $quoteType = self::parseConstantString(array('"', "'"), $theString, $currentPosition, $currentPosition);
-        if($quoteType === null)
-        {   return null; // failure
-        }
-
-        while(true)
-        {   // get normal characters
-            $result += self::getOtherChars($theString, $quoteType+'\\', "", $currentPosition);
-
-            // get special characters
-            if($currentPosition===$length)
-            {   return null; // fail
-            } else if($theString[$currentPosition] === $quoteType)
-            {   break; // quote's done
-            } else if($theString[$currentPosition] === '\\')
-            {   $currentPosition += 1;
-                if($currentPosition===$length)
-                {   return null; // fail
-                } else if($quoteType === "'")
-                {   $c = $theString[$currentPosition];
-                    if($c === '\\')
-                    {   $result += '\\';
-                    } else if($c === "'")
-                    {   $result += "'";
-                    } else
-                    {   $result += '\\'.$c; // literal
-                    }
-                } else /*$quoteType === '"'  */
-                {   $c = $theString[$currentPosition];
-                    if($c === '\\')
-                    {   $result += '\\';
-                    } else if($c === '"')
-                    {   $result += '"';
-                    } else if($c === 'n')
-                    {   $result += "\n";
-                    } else if($c === 'r')
-                    {   $result += "\r";
-                    } else if($c === 't')
-                    {   $result += "\t";
-                    } else if($c === 'v')
-                    {   $result += "\v";
-                    } else if($c === 'f')
-                    {   $result += "\f";
-                    } else if($c === '$')
-                    {   $result += "\$";
-                    } else
-                    {   $result += '\\'.$c; // literal
-                    }
-                }
-            }
-        }
-
-        $curPosition = $currentPosition;    // set the output variable on successful completion
-        return $result;
-    }
-
-    // translates something like this:  member1 member2 <direction>: member3  <direction>: memberetc
-    // into: array(<defaultDirection>, member1, member2, <direction>, member3, <direction> memberetc)
-    private static function parseSortList($stringFetchOptions, $startPosition, &$endPosition)
-    {   $dummy = null; // will be overwritten
-        $currentPosition = $startPosition;
-        $result = array();
-
-        while(true)
-        {   $directionChange = self::parseSortDirection($stringFetchOptions, $currentPosition, $currentPosition);
-            if($directionChange !== null)
-            {   $result[] = $directionChange;
-            } else if(count($result) === 0)
-            {   $result[] = self::ascend;
-            }
-
-            $memberName = self::parseVariableName($stringFetchOptions, $currentPosition, $currentPosition);
-
-            if($memberName === null)
-            {   return null; // this means there was a syntax error
-            } else
-            {   $result[] = $memberName;
-            }
-
-            $dummy = $currentPosition; // make sure $currentPosition isn't changed
-            $word = self::getDataControlType($stringFetchOptions, $dummy);
-            if($word != null)
-            {   break;  // done
-            }
-            $endBracket = self::parseConstantString("]", $stringFetchOptions, $currentPosition, $dummy);
-            if($endBracket !== null)
-            {   break;  // done here too
-            }
-        }
-
-        $endPosition = $currentPosition;
-        return $result;
-    }
-        private static function parseSortDirection($stringFetchOptions, &$curPositionOut)
-        {   $currentPosition = $curPositionOut;
-
-            $result = self::parseConstantString(array('asc', 'desc'), $stringFetchOptions, $currentPosition, $currentPosition);
-            if($result !== null)
-            {   $colonResult = self::parseConstantString(':', $stringFetchOptions, $currentPosition, $currentPosition);
-                if($colonResult !== null)
-                {   $curPositionOut = $currentPosition;
-                    if($result=='asc')
-                    {   return self::ascend;
-                    } else
-                    {   return self::descend;
-                    }
-                }
-            } else
-            {   return null;
-            }
-        }
-
-    // translate something like: 0:10
-    // into: array(0, 10)
-    private static function parseRange($stringFetchOptions, &$curPosition) {
-        $currentPosition = $curPosition;
-
-        self::parseWhiteSpace($stringFetchOptions, $currentPosition); // ignore preceding whitespace
-        $startIndex = self::parseNumber($stringFetchOptions, $currentPosition, $currentPosition);
-        if($startIndex === null) { return null; }
-
-        self::parseWhiteSpace($stringFetchOptions, $currentPosition); // ignore preceding whitespace
-        $endIndex = self::parseNumber($stringFetchOptions, $currentPosition, $currentPosition);
-        if($endIndex === null) { return null; }
-
-        $curPosition = $currentPosition;
-        return array($startIndex+0, $endIndex+0);   // the +0 is for converting to a number (even if its bigger than an integer can store - don't want to truncate)
-    }
-
-    // parses either a single constant string, or one of a list of constant strings
-    private static function parseConstantString($stringsToGet, $theString, $startPosition, &$endPosition)
-    {   $result=null; // will be overwritten
-
-        if(gettype($stringsToGet) !== "array")
-        {   $stringsToGet = array($stringsToGet);
-        }
-        $numberOfCharactersGotten = self::getConstantStringToken($theString, $startPosition, $stringsToGet, $result);
-
-        if(in_array($numberOfCharactersGotten, array(0,-1)))
-        {   return null;
-        } else
-        {   $endPosition = $startPosition+$numberOfCharactersGotten;
-            return $result;
-        }
-    }
-
-    // gets an integer number
-    private static function parseNumber($theString, &$curPosition)
-    {   $result = null; // will be overwritten
-
-        $numberOfCharactersGotten = self::getCertainChars($theString, $curPosition, "", "09", $result);
-        if($numberOfCharactersGotten == 0)
-        {   return null;
-        } else
-        {   $curPosition += $numberOfCharactersGotten;
-            return $result;
-        }
-    }
-
-    // returns the variable name, or null if no match
-    private static function parseVariableName($theString, $startPosition, &$endPosition)
-    {   $wordStartPosition = $startPosition;
-        self::parseWhiteSpace($theString, $wordStartPosition); // ignore whitespace
-
-        if($wordStartPosition >= strlen($theString) || '0' <= $theString[$wordStartPosition] && $theString[$wordStartPosition] <= '9')
-        {   return null; // variables can't start with a number
-        }
-
-        $result = null; // will be overwritten
-        $numberOfCharactersGotten = self::getCertainChars($theString, $wordStartPosition, "_", "09azAZ", $result);
-        if($numberOfCharactersGotten == 0)
-        {   return null;
-        }
-        else
-        {   $endPosition = $wordStartPosition+$numberOfCharactersGotten;
-            return substr($theString, $wordStartPosition, $endPosition-$wordStartPosition);
-        }
-    }
-
-    private static function parseWhiteSpace($theString, &$curPosition)
-    {   $result = null; // will be overwritten
-        $numberOfCharactersGotten = self::getCertainChars($theString, $curPosition, " \t\n\r", "", $result);
-        $curPosition += $numberOfCharactersGotten;
-    }
+	public function fetch( /*$fetchOptions ) OR fetch($className) OR fetch($className, $id*/ )
+	{	$args = func_get_args();
+		if(count($args) == 0)
+		{	if($this->isRoot())
+			{	throw new cept("Sqool doesn't support fetching the entire database by calling 'fetch' without arguments yet.");
+			}else
+			{	$mode = "members";
+				$firstArg = array();
+				$hasFetchOptions = false;
+				$ID = $this->id;
+				$className = self::getFrontEndClassName($this);
+				$objectRef = array($this);
+			}
+		}
+		else if(count($args) == 1)
+		{	if($this->isRoot())
+			{	$mode = "tables";
+				$firstArg = $args[0];
+			}else
+			{	$this->requireID("fetch from");
+			
+				$mode = "members";
+				$hasFetchOptions = true;
+				$firstArg = $args[0];
+				$ID = $this->id;
+				$className = self::getFrontEndClassName($this);
+				$objectRef = array($this);
+			}
+		}
+		else if(count($args) == 2)	// return an object with a connection and an ID (makes no call to the database server)
+		{	$this->validateRoot("A call to 'fetch' with 2 arguments must be called on a database root object (an object returned by sqool::connect)");
+
+			$className = $args[0];
+			$newObj = new $className();	// this assumes that the class constructor doesn't have any parameters - not a safe assumption
+			$newObj->id = $args[1];
+			self::setUpSqoolObject($newObj, $this->databaseRootObject);
+			return $newObj;
+		}
+		else
+		{	throw new cept("fetch called with too many arguments");
+		}
+		
+		if($this->databaseRootObject->queueFlag === false)
+		{	$this->databaseRootObject->queue();
+			$goImmedaitely = true;
+		}else
+		{	$goImmedaitely = false;
+		}
+		
+		$fetchOptions = $this->membersToKeyValue($firstArg);
+		
+		if($mode == "tables")	// if this is the root
+		{	foreach($fetchOptions as $k=>$v)
+			{	foreach($this->createFetchOperation($k, $v, array($this, $k), "tables") as $o)
+				{	$this->databaseRootObject->addToCallQueue($o);	// insert the calls into the callQueue
+				}
+			}
+		}else
+		{	// translate into the uniform fetch form
+		
+			$mainOptions = array
+			(	"cond"=>array(self::getClassPrimaryKey($className)."=",$ID), 
+				"ranges"=>array(0,0)	// only return the first item found (since there can only be one)
+			);
+			if($hasFetchOptions)
+			{	$mainOptions["members"] = $fetchOptions;
+			}
+			
+			foreach($this->databaseRootObject->createFetchOperation($className, $mainOptions, $objectRef, "members") as $o)
+			{	$this->databaseRootObject->addToCallQueue($o);	// insert the calls into the callQueue
+			}
+		}	
+		
+		if($goImmedaitely)
+		{	$this->databaseRootObject->go();
+		}
+	}
 	
 	// transforms a members array into key value form (potentially from a mix of key=>value and implicit integer keying 
 	private function membersToKeyValue($membersArray)
@@ -1382,11 +831,7 @@ class sqool			// connection to a database
 	}
 	
 	private function executeQueriesAndHandleResult($multiqueries, $numberOfCommands_inEachMultiquery)
-	{	if(count($multiqueries) === 0)
-        {   throw new cept("Strange... there are no querys to run");  
-        }
-
-        // run the multiquery
+	{	// run the multiquery
 		$results = $this->rawSQLquery(implode("", $multiqueries));
 		
 		// handle the results
@@ -1437,10 +882,6 @@ class sqool			// connection to a database
 			$this->call_function_ref(self::$operations[$op["opName"]]["resultHandler"], array($op, $applicableResults));
 			$resultsIndex += $numApplicableResults;
 		}
-
-        if(count($results["resultSet"]) === 0 && $results["errorNumber"] === 1065) // result was empty
-        {   throw new cept("There is no result set... : ( "+$results["errorMsg"]);  
-        }
 		
 		if(count($results["resultSet"]) > $resultsIndex)
 		{	throw new cept("There are too many results (".count($results["resultSet"]).") for the query/queries being processed. Make sure your 'sql' calls only contain one query each and do NOT end in a semi-colon.");
@@ -1500,10 +941,6 @@ class sqool			// connection to a database
 		{	$this->databaseRootObject->addToCallQueue(self::createRMdatabaseOperation($this->connectionInfo["database"]));	// insert the call into the callQueue
 		}else
 		{	$this->databaseRootObject->addToCallQueue(self::createRMobjectOperation(self::getFrontEndClassName($this), $this->id));	// insert the call into the callQueue
-		}
-
-        if($this->databaseRootObject->queueFlag === false)
-		{	$this->go();
 		}
 	}
 	
@@ -1987,8 +1424,7 @@ class sqool			// connection to a database
 		if(isset($expression["raw"]))
 		{	$whereClause = $expression["raw"];
 		}else
-		{	// todo: probably remove this - I don't think we need it anymore (in fact, this function isn't needed if thats the case)
-            for($n=0; $n<count($expression); $n+=2)
+		{	for($n=0; $n<count($expression); $n+=2)
 			{	$leftPart = $this->parseExpressionLeft($expression[$n]);
 				if($n == 0 && $leftPart["operators"][0] != "")
 				{	throw new cept("Sqool syntax error: You can't begin a 'cond' expression with an operator. Error here: '".print_r($expression, true)."'");
@@ -2000,7 +1436,7 @@ class sqool			// connection to a database
 				$whereClause .= $leftPart["operators"][0].$leftPart["member"].$leftPart["operators"][1].$rightPart;
 			}
 		}
-		return $whereClause;
+		return "(".$whereClause.")";
 	}
 	
 	private function parseExpressionLeft($condLeft)
@@ -2010,7 +1446,6 @@ class sqool			// connection to a database
 		{	$operators = array();
 			
 			$position = 0;
-            $operator1 = null;  $operator2 = null; $member = null; // will be overwritten
 			$position += self::getCharsExcept($condLeft, $position, "_", "09azAZ", $operator1);	// get first operator
 			$operators[0] = trim($operator1);	// trim off whitspace
 			
@@ -2079,7 +1514,8 @@ class sqool			// connection to a database
 	
 					/*************** createTable ***************/
 					// 			internal operation 
-					// $op holds: array("opName"=>"createTable", "class"=>$className, "classDefinition"=>$classDefinition);
+					// $op holds: array("opName"=>"createTable", "class"=>$className, "classDefinition"=>$classDefinition);	
+					// 		$newColumns is an array with members of the form $memberName => $type
 					
 	// returns the SQL to create a mysql table named $tableName 
 	// $op["sqlColumnDefinitions"] should be an associtive array where the key is the name of the column, and the value is the type
@@ -2165,7 +1601,7 @@ class sqool			// connection to a database
 	
 					/*************** rmTable ***************/
 					// 			internal operation 
-					// $op holds: array("opName"=>"rmTable", "tableName"=>$tableName)
+					// $op holds: array("opName"=>"rmDatabase", "DBname"=>$connectionInfo["database"])
 	
 	private function rmTableSQLgenerator($op)
 	{	return array
@@ -2201,21 +1637,6 @@ class sqool			// connection to a database
 			$n+=1;
 		}
 		return $n;
-	}
-
-    // extracts a string from "theString" (beginning at "index") that is made up of the characters that are NOT in "singles" or "ranges"
-	// puts the result in "result"
-	public static function getOtherChars($theString, $singles, $ranges, &$curPositionOut)
-	{	$curPosition = $curPositionOut;
-        $result = "";
-
-		while(isset($theString[$curPosition]) && ! self::charIsOneOf($theString[$curPosition], $singles, $ranges))
-		{	$result .= $theString[$curPosition];
-			$curPosition += 1;
-		}
-
-        $curPositionOut = $curPosition;
-		return $result;
 	}
 	
 	// extracts a string from "theString" (beginning at "index") that does NOT contain the characters in "singles" or "ranges"
@@ -2269,8 +1690,7 @@ class sqool			// connection to a database
 	}
 	
 	public static function ignoreLeadingWhitespace($string, $index)
-	{	$dumdum = null; // will be overwritten
-        $whitespace = " \t\n\r";
+	{	$whitespace = " \t\n\r";
 		$whitespaceChars = self::getCertainChars($string, $index, $whitespace, '', $dumdum);	// ignore whitespace
 		return $whitespaceChars;
 	}
@@ -2281,7 +1701,9 @@ class sqool			// connection to a database
 	// returns -1 if string is done
 	// returns -2 if string is an invalid variable
 	public static function getVariableKeyWord($string, $index, &$result)
-	{	$whitespaceChars = self::ignoreLeadingWhitespace($string, $index);
+	{	$whitespace = " \t\n\r";
+		
+		$whitespaceChars = self::ignoreLeadingWhitespace($string, $index);
 		$index += $whitespaceChars;
 		if($index >= strlen($string))
 		{	return -1;	// no variable
@@ -2303,34 +1725,24 @@ class sqool			// connection to a database
 	// discards leading whitespace
 	// returns -1 if $stringToRead is done
 	// returns 0 if the $stringToGet isn't found
-	// returns number of characters gotten (strlen($stringToGet)) on success
-	public static function getConstantStringToken($stringToRead, $startIndex, $stringsToGet, &$result)
-	{	$whitespaceChars = self::ignoreLeadingWhitespace($stringToRead, $startIndex);
-		$startIndex += $whitespaceChars;
-		if($startIndex >= strlen($stringToRead))
+	// returns number of characters gotten (count($stringToGet)) on success
+	public static function getConstantStringToken($stringToRead, $index, $stringsToGet)
+	{	$whitespace = " \t\n\r";
+		
+		$whitespaceChars = self::ignoreLeadingWhitespace($stringToRead, $index);
+		$index += $whitespaceChars;
+		if($index >= strlen($stringToRead))
 		{	return -1;	// $stringToRead is done
 		}
 		
 		foreach($stringsToGet as $s)
-		{	if($s == substr($stringToRead, $startIndex, strlen($s)))
-			{	$result = $s;
-                return $whitespaceChars+strlen($s);	// got it
+		{	if($s == substr($stringToRead, $index, count($s)))
+			{	return $whitespaceChars+count($s);	// got it
 			}
 		}
 		
 		return 0;	// didn't get any of them
-	}
-
-    // returns string gotten
-    // $curPosition will be incrimented by the length of the string gotten
-    public static function getConstantString($stringToRead, $stringsToGet, &$curPositionOut)
-    {   foreach($stringsToGet as $s)
-		{	if($s === substr($stringToRead, $curPositionOut, strlen($s)))
-			{	$curPositionOut += strlen($s);
-                return $s;	// got it
-			}
-		}
-    }
+	}	
 	
 	// calls function references, even if they start with 'self::' or '$this->'
 	// $params should be an array of parameters to pass into $function
@@ -2474,13 +1886,7 @@ class sqool			// connection to a database
 				}else
 				{	$resultSet[] = array();
 				}
-				
-				if($connection->more_results())
-				{	$connection->next_result();
-				} else
-				{	break;
-				}
-			}while(true);
+			}while($connection->next_result());
 		}
 		
 		$returnResult = array("resultSet"=>$resultSet, "errorNumber"=>$connection->errno, "errorMsg"=>$connection->error);	// returns the results and the last error number (the only one that may be non-zero)
@@ -2503,16 +1909,15 @@ class sqool			// connection to a database
 		{	//connect
 			
 			if(self::$debugFlag)
-			{	if(self::$debugMessageHasBeenWritten === false)
-				{	self::$debugMessageHasBeenWritten = true;
-					echo "\n\n***** To turn off debug messages, add \"sqool::debug(false);\" to your code *****\n\n";
+			{	if($debugMessageHasBeenWritten === false)
+				{	$debugMessageHasBeenWritten = true;
+					echo '\n\n***** To turn off debug messages, add "sqool::debug(false);" to your code *****\n\n';
 				}
 				
 				echo "\n<br><br>\nAttempting to connect to the database ".$this->connectionInfo["database"]." on ".$this->connectionInfo["host"]." with the username ".$this->connectionInfo["username"].".\n<br><br>\n";
 			}
 			
 			@$this->connectionInfo["con"] = new mysqli($this->connectionInfo["host"], $this->connectionInfo["username"], $this->connectionInfo["password"], $this->connectionInfo["database"]);
-
 			
 			if($this->connectionInfo["con"]->connect_errno)
 			{	if($this->connectionInfo["con"]->connect_errno == 1049)	// database doesn't exist
@@ -2679,8 +2084,9 @@ class sqool			// connection to a database
 	// examples of returned values: array("bogus"=>array("baseType"=>"int"))  array("bogus2"=>array("baseType"=>"int", "listType"=>"list")
 	//		  						array("bogus3"=>array("baseType"=>"someobjName")  array("bogus4"=>array("baseType"=>"yourmomisanobject", "listType"=>"list") 
 	private static function parseMemberDefinition($members, &$index)
-	{	$baseType = null; $listOrRefOrNone = null; $name = null; $dumdum = null; // will be overwritten
-        $result = self::getVariableKeyWord($members, $index, $baseType);
+	{	$whitespace = " \t\n\r";
+		
+		$result = self::getVariableKeyWord($members, $index, $baseType);
 		if($result == -1)
 		{	return false;	// no more members (string is over)
 		}else if($result == -2)
@@ -2688,8 +2094,7 @@ class sqool			// connection to a database
 		}else
 		{	$index += $result;
 		}
-
-
+		
 		$result = self::getVariableKeyWord($members, $index, $listOrRefOrNone);
 		if($result > 0 && $listOrRefOrNone=="list")
 		{	$index += $result;
@@ -2700,7 +2105,7 @@ class sqool			// connection to a database
 		{	throw new cept("Error parsing types: 'list' or ':' expected but got'".$listOrRefOrNone."'\n");
 		}
 		
-		$result = self::getConstantStringToken($members, $index, array(":"), $dumdum);
+		$result = self::getConstantStringToken($members, $index, array(":"));
 		if($result <= 0)
 		{	throw new cept
 			(	"Error parsing types: ':' was expected but not found starting from character ".$index." in member definition that begins with '".substr($members, $index, 20)."'.\n"
@@ -2730,7 +2135,7 @@ class sqool			// connection to a database
 			{	$this->databaseRootObject->go();			// TODO: handle this better later (write code so that an extra multi-query isn't needed)
 				$this->databaseRootObject->queue();			// turn queuing back on (since it was obviously on before)
 			}
-
+			
 			if($this->id === false)	//if the ID is still false
 			{	throw new cept("Attempted to ".$actionText." an object that isn't in a database yet. (Use sqool::insert to insert an object into a database).");
 			}
@@ -2794,50 +2199,45 @@ class sqool			// connection to a database
 	// $listInfo can either be "new", an integer listID, or false if it isn't new but not ID is immediately available
 	private function PHPvalToSqoolVal($sqoolType, $sqoolVal, $fieldToUpdateAfterInsert, $listInfo=false)
 	{	$ops = array();
-
-        $isPrimitiveType = in_array($sqoolType["baseType"], self::primtypes());
-        if(!$isPrimitiveType && ! in_array("sqool", self::getFamilyTree($sqoolType["baseType"])))
-        {   throw new cept("Invalid type: '".$sqoolType["baseType"]."'");
-        }
-
-
-        if(isset($sqoolType["listType"]))
-        {	if($sqoolType["listType"] == "list")
-            {	if($listInfo === "new")
-                {	$sqlVal = null;		// to be filled with the ID of the list after it's inserted
-                    $ops = $this->createInsertListOp(array("baseType"=>$sqoolType["baseType"]), $sqoolVal, $fieldToUpdateAfterInsert);
-                }else if($listInfo === false)
-                {	throw new cept("We're not doing list IDs yet1.");
-                }else if(is_int($listInfo))
-                {	throw new cept("We're not doing list IDs yet2.");
-                }else
-                {	throw new cept("Unknown listInfo format in PHPvalToSqoolVal. listInfo: ".$listInfo);
-                }
-            } else if($sqoolType["listType"] == "listItem")
-            {	$sqlVal = null;		// to be filled with the ID of the list after it's inserted
-                $ops = $this->createInsertOp_explicitDefinition($sqoolVal, $fieldToUpdateAfterInsert, $sqoolType["baseType"], self::$classes["definition"]);
-            }else
-            {	throw new cept("Invalid listType ".$sqoolType["listType"]);
-            }
-        }else
-        {	if($isPrimitiveType)
-            {   $sqlVal = sqool::primValToSQLVal($sqoolVal, $sqoolType["baseType"]);
-
-            } else
-            {   if($sqoolVal === null)
-                {	$sqlVal = null;
-                }else if($sqoolVal->id === false)
-                {	$sqlVal = null;		// to be filled with the ID of the object after it's inserted
-                    $ops = $this->createInsertOp($sqoolVal, $fieldToUpdateAfterInsert);
-                }else
-                {	$sqlVal = $sqoolVal->id;
-                    // queue saving the object - if the object has stuff to save
-                    if(count($sqoolVal->changedVariables) > 0)
-                    {	$ops = $this->createSaveOp($sqoolVal);
-                    }
-                }
-            }
-        }
+		
+		if(in_array($sqoolType["baseType"], self::primtypes()))
+		{	if(isset($sqoolType["listType"]))
+			{	if($sqoolType["listType"] == "list")
+				{	if($listInfo === "new")
+					{	$sqlVal = null;		// to be filled with the ID of the list after it's inserted
+						$ops = $this->createInsertListOp($sqoolType["baseType"], $sqoolVal, $fieldToUpdateAfterInsert);
+					}else if($listInfo === false)
+					{	throw new cept("We're not doing list IDs yet1.");
+					}else if(is_int($listInfo))
+					{	throw new cept("We're not doing list IDs yet2.");
+					}else
+					{	throw new cept("Unknown listInfo format in PHPvalToSqoolVal.");
+					}
+				}else if($sqoolType["listType"] == "listItem")
+				{	$sqlVal = null;		// to be filled with the ID of the list after it's inserted
+					$ops = $this->createInsertOp_explicitDefinition($sqoolVal, $fieldToUpdateAfterInsert, $sqoolType["baseType"], self::$classes["definition"]);
+				}else
+				{	throw new cept("Invalid listType");
+				}
+			}else
+			{	$sqlVal = sqool::primValToSQLVal($sqoolVal, $sqoolType["baseType"]);
+			}	
+		}else if(in_array("sqool", self::getFamilyTree($sqoolType["baseType"])))
+		{	if($sqoolVal === null)
+			{	$sqlVal = null;
+			}else if($sqoolVal->id === false)
+			{	$sqlVal = null;		// to be filled with the ID of the object after it's inserted
+				$ops = $this->createInsertOp($sqoolVal, $fieldToUpdateAfterInsert);
+			}else
+			{	$sqlVal = $sqoolVal->id;
+				// queue saving the object - if the object has stuff to save
+				if(count($sqoolVal->changedVariables) > 0)
+				{	$ops = $this->createSaveOp($sqoolVal);
+				}
+			}			
+		}else
+		{	throw new cept("Invalid type: '".$sqoolType["baseType"]."'");
+		}
 		
 		if($sqlVal === null)
 		{	return array("value"=>"null", "ops"=>$ops);

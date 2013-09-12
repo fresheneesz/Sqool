@@ -1,0 +1,288 @@
+<html><title>PHP4 Forum Article Archive</title><link href="storing files with sql_files/forum000.css" rel="stylesheet" type="text/css"/><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"/><body>
+  <div class="rowArticle"><b>Date: Sun Sep 08, 2002 12:39 pm</b><br/><b>Topic: Article 1: Uploading binary files to mySQL</b><br/><b>Views: 51359</b></div>
+
+  
+
+<div class="rowArticleText"><pre>Welcome to my 1st article on PHP4.COM... Hopefully more to come.. If you have suggests about
+what you'd like to have an article/how-to on, be sure to drop me an email.
+
+Before writing this article I did a quick google search for others who had dabbled in this
+area and only found 1 half-decent article. It was on phpbuilder.com written by a fellow
+named Florian. Now it worked ok, but was written with PHP3 in mind and I'm fairly certain
+designed to handle small files, which is not the case in the real world. I'll be pointing out
+some of the advantages of doing it the way I went. Also be sure now that everyone is in the
+world of PHP4, be sure to disable global var tracking!!
+
+So what's with storing binary files in mySQL databases? Some might say it's a terrible
+idea, some might say it's a good idea... It all depends on the application. Storing
+files on disk is much simpler but itself has some limitations. Let's say you need to store
+20GB of data and grow by 10GB/month.. Pretty soon that can easily fill up your webserver
+disk space.. And how do you add more? Drop in another disk, eventually you'll not be
+able to hookup any more disks, not to mention the downtime installing the new drive(s).
+How about NFS/SMB network shares? That's not a bad idea either but not without it's problems. 
+
+I've used mySQL binary storage in a few different applications now with good results. The
+biggest advantage is easily scalability. If tomorrow I needed to add 50GB of storage onto
+the system, you just grab yourself another Pentium II+ computer, drop a disk in it, install
+a base Linux OS on it and MySQL. Then in the case of my applications, there is a master database
+that controls all the location of the files. You just tell it that there is another storage
+server available, it's IP address, login, password, etc. And now it's available for use. This
+causes no downtime of any kind. Virtually unlimited scalability, you keep adding storage servers
+as demand for storage increases and if the webserver becomes overloaded handing the number of
+requests, you simply setup another mirrored webserver in a load-balanced environment and they
+both handle requests, cross connecting to the correct storage server to fulfill the frontend
+requests. 
+
+Now onto database design theory.. In most other examples, people took the easy way out. They went
+with a basic table design of: 
+
+CREATE TABLE binary_data (
+id INT(4) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+description CHAR(50),
+bin_data LONGBLOB,
+filename CHAR(50),
+filesize CHAR(50),
+filetype CHAR(50)
+); 
+
+----------
+Now this example stores the file metadata and binary data all in 1 table.. A bad idea in my opinion.
+Also they use the column type of LONGBLOB.. This works ok for small files.. But as soon as you get into
+files larger than 1MB you're in trouble. mySQL by default has configured certain run-time variables
+quite low for this type of application use. Such variables as max_allowed_packet... You can boost
+these variables to higher runtime values.. But with my example you don't need to... 
+
+Another problem with the table definition above is that all the data for the file is stored in 1 row..
+So using a basic select you'll have to pull all the data from the mysql database to the webserver
+before sending it to the client.. With small files this doesn't matter, but say you had a 100MB file
+in the database, that means PHP on the webserver side will have to store 100MB of data in memory while
+it's being downloaded.. This is a bad thing as it can quickly eat up server memory on a busy site.
+Now there are ways around this such as looping thru and sub selecting pieces of the binary data
+from mysql.. But I prefer to stay away from this situation completely. 
+
+Let's begin with my example layout.. Please note the table design/code presented here are snippets
+from various application classes .. you should implement this code/design in classes that handle
+this type of operation. 
+
+Firstly lets start with my basic table layouts for the 2 required tables:
+
+CREATE DATABASE storage1;
+use storage1;
+
+CREATE TABLE file (
+id mediumint(8) unsigned NOT NULL auto_increment,
+datatype varchar(60) NOT NULL default 'application/octet-stream',
+name varchar(120) NOT NULL default '',
+size bigint(20) unsigned NOT NULL default '1024',
+filedate datetime NOT NULL default '0000-00-00 00:00:00',
+PRIMARY KEY (id) ) TYPE=MyISAM
+
+CREATE TABLE filedata (
+id mediumint(8) unsigned NOT NULL auto_increment,
+masterid mediumint(8) unsigned NOT NULL default '0',
+filedata blob NOT NULL,
+PRIMARY KEY (id),
+KEY master_idx (masterid) ) TYPE=MyISAM
+
+----------
+
+So as you can see there are 2 tables... 1 stores the meta-data for the file (name, size, etc) And
+the other stores all the binary data in BLOB columns (64K) chunks.. These chunks could also be compared
+to inodes which makeup filesystems. The advantage to using a smaller column size is that you can
+request the rows 1 by 1 from the webserver and stream them out to the client, using low memory overhead.
+It will result in a persistent connection to the database being up for sometime (depending on filesize
+and client download speed), but with mysql being to handle 100 connections by default, I have yet to
+top out a storage server. The other nice thing about using 2 tables, is if say your just going to be
+listing the files in it.. You now only need to deal with a very small table for the file's meta-data
+not scan a very large file containing meta-data and binary text which would take much more database
+execution time.
+
+Start with this example upload script (uploadpage.php): 
+
+</pre></div>
+
+<div class="rowArticleCode"><b>Code/Quote:</b><pre>
+&lt;form method="post" action="uploadprocess.php" enctype="multipart/form-data"&gt;
+&lt;input type="file" name="file1" size="20"&gt;
+&lt;input type="submit" name="submit" value="submit"&gt;
+&lt;/form&gt;
+</pre></div>
+
+<div class="rowArticleText"><pre>
+----------
+
+Then with a basic processor script (uploadprocess.php): 
+</pre></div>
+
+<div class="rowArticleCode"><b>Code/Quote:</b><pre>
+&lt;?
+// Upload processor script
+// At this point your script would determine what storage server to connect to
+// I'm just going to hardcode it here
+
+$Storage_IP = "172.21.5.100";
+$Storage_Port = 3306;
+$Storage_User = "root";
+$Storage_Passwd = "secret";
+$Storage_DB = "storage1";
+
+$connectto = $Storage_IP . ":" . $Storage_Port;
+
+if (!$linkid = @mysql_connect($connectto, $Storage_User, $Storage_Passwd)) {
+&amp;nbsp;&amp;nbsp;die("Unable to connect to storage server!");
+}
+
+if (!mysql_select_db($Storage_DB, $linkid)) {
+  die("Unable to connect to storage database!");
+}
+
+// Init values - these are used incase you want to upload multiple files, you just
+// add them to the source form as file1, file2, file3, etc.
+$STARTFILE = 1;
+$ONFILE = "file" . $STARTFILE;
+
+while (isset($HTTP_POST_FILES["$ONFILE"])) {
+
+  // Try!
+  $SrcPathFile = $HTTP_POST_FILES["$ONFILE"]["tmp_name"];
+  $SrcFileType = $HTTP_POST_FILES["$ONFILE"]["type"];
+  $DstFileName = $HTTP_POST_FILES["$ONFILE"]["name"];
+
+  clearstatcache();
+  $time = filemtime($SrcPathFile);
+  $storedate = date("Y-m-d H:i:s", $time);
+
+  // File Processing
+  if (file_exists($SrcPathFile)) {
+
+    // Insert into file table
+    $SQL  = "insert into file (datatype, name, size, filedate) values ('";
+    $SQL .= $SrcFileType . "', '" . $DstFileName . "', " . filesize($SrcPathFile);
+    $SQL .= ", '" . $storedate . "')";
+
+    if (!$RES = mysql_query($SQL, $linkid)) {
+      die("Failure on insert to file table!");
+    }
+
+    $fileid = mysql_insert_id($linkid);
+
+    // Insert into the filedata table
+    $fp = fopen($SrcPathFile, "rb");
+    while (!feof($fp)) {
+
+      // Make the data mysql insert safe
+      $binarydata = addslashes(fread($fp, 65535));
+
+      $SQL = "insert into filedata (masterid, filedata) values (";
+      $SQL .= $fileid . ", '" . $binarydata . "')";
+
+      if (!mysql_query($SQL, $linkid)) {
+        die("Failure to insert binary inode data row!");
+      }
+    }
+
+    fclose($fp);
+  }
+
+  $STARTFILE ++;
+  $ONFILE = "file" . $STARTFILE;
+}
+
+echo "Upload Complete";
+?&gt;</pre></div>
+
+<div class="rowArticleText"><pre>----------
+
+That's the basic jist of it... Please note.. This script is not an exact cut-paste from production
+code... So before leaving a note that it doesn't work.. be sure to throughly debug it.. Or better
+yet, just use the concept/example code and write your own code (perhaps better) .. ;)
+
+Now if you want to retrieve and stream this data down to the end user you can take a look at this very
+simple example script (download.php) called like download.php?id=1 : </pre></div>
+
+<div class="rowArticleCode"><b>Code/Quote:</b><pre>
+&lt;?
+// Download script.. streams data from a mysql database, thru the webserver to a client browser
+
+if (isset($_GET["id"])) {
+
+  $Storage_IP = "172.21.5.100";
+  $Storage_Port = 3306;
+  $Storage_User = "root";
+  $Storage_Passwd = "secret";
+  $Storage_DB = "storage1";
+
+  $connectto = $Storage_IP . ":" . $Storage_Port;
+
+  if (!$linkid = @mysql_connect($connectto, $Storage_User, $Storage_Passwd)) {
+    die("Unable to connect to storage server!");
+  }
+
+  if (!mysql_select_db($Storage_DB, $linkid)) {
+    die("Unable to connect to storage database!");
+  }
+
+  $nodelist = array();
+
+  // Pull file meta-data
+  $SQL = "select * from file where id = " . $_GET["id"];
+  if (!$RES = mysql_query($SQL, $linkid)) {
+    die("Failure to retrive file metadata");
+  }
+
+  if (mysql_num_rows($RES) != 1) {
+    die("Not a valid file id!");
+  }
+
+  $FileObj = mysql_fetch_object($RES);
+
+  // Pull the list of file inodes
+  $SQL = "SELECT id FROM filedata WHERE masterid = " . $_GET["id"] . " order by id";
+
+  if (!$RES = mysql_query($SQL, $linkid)) {
+    die("Failure to retrive list of file inodes");
+  }
+
+  while ($CUR = mysql_fetch_object($RES)) {
+    $nodelist[] = $CUR-&gt;id;
+  }
+
+  // Send down the header to the client
+  Header ( "Content-Type: $FileObj-&gt;datatype" );
+  Header ( "Content-Length: " . $FileObj-&gt;size );
+  Header ( "Content-Disposition: attachment; filename=$FileObj-&gt;name" );
+
+  // Loop thru and stream the nodes 1 by 1
+
+  for ($Z = 0 ; $Z &lt; count($nodelist) ; $Z++) {
+    $SQL = "select filedata from filedata where id = " . $nodelist[$Z];
+
+    if (!$RESX = mysql_query($SQL, $linkid)) {
+      die("Failure to retrive file node data");
+    }
+
+    $DataObj = mysql_fetch_object($RESX);
+    echo $DataObj-&gt;filedata;
+  }
+}
+?&gt; </pre></div>
+
+<div class="rowArticleText"><pre>----------
+
+I've just tested these scripts to be working correctly... they work well with streaming images.. Feel
+free to post any questions about them and I'll do my best to answer (as well as anyone else online).
+
+Latz. B0nFire. (b0nfire@dreamwerx.net)
+
+</pre></div>
+
+  
+  <div class="footer"><a href="http://www.dreamwerx.net/phpforum/">Back to article list</a></div></body></html>
+<script src="storing files with sql_files/urchin00.js" type="text/javascript">
+</script>
+<script type="text/javascript">
+_uacct = "UA-147630-4";
+urchinTracker();
+</script>
+
+<!-- This document saved from http://www.dreamwerx.net/phpforum/?id=1 -->

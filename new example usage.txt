@@ -1,0 +1,76 @@
+
+sqool::Class("ted", 
+'	int list:bob
+	string:jake
+	ted:dunk	
+');
+
+class A extends sqool
+{	function struct()
+	{	return
+		'	int list:bob
+			string:jake
+			ted:dunk	
+		'
+	}
+
+	function A()
+	{	$this->make();
+	}
+}
+
+
+
+$db = new sqool("username", "password", "database", "host");
+
+$a = $db->fetch("ted", 3);
+
+$x = new ted($db);
+$y = new ted();
+
+$x->bob = array(2,3,4,5);
+$x->dunk = $y;
+$x->save();
+
+$d = $a->nuts;
+
+$x->dunk = $d;
+$x->save();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+sqool::Class("user",
+'	string:name
+');
+
+sqool::Class("group",
+'	string:name
+	list group_member:members
+');
+
+sqool::Class("group_member",
+'	user:member
+	int:status
+');
+
+
+$db->fetch("user" => array("items"=>4));
+
+$db->fetch("user" => array
+(	"cond" => array()
+));
+
+
+// fetch all users that are in at least one group that current user is in
+fetch user where user.id == 

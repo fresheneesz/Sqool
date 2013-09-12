@@ -1,0 +1,46 @@
+
+* allow people to customize inserting with an ID (for sharding)
+	* user would write some code to get the ID, and return it in the function used for this
+
+New architecture ideas:
+	* database called sqool_meta that stores global data, meta data, and generally anything else that isn't an explicitly defined object
+		* global				table that stores global scaler values
+			* next_list_id				the next list ID to use for a new list
+		* list					table that holds all the object-lists in the database
+			* id					the id of each list-entry (Not strictly used right now)
+			* list_id				the ID of the list that owns the object
+			* object_id				the ID of the object/primitive that the list owns		
+		* PRIMITIVE_TYPE_list			table that holds all of the list items for lists of primitive values of a certain type (for example int_list or float_list)
+			* id					the ID of the list
+			* value					the value	
+		* maybe also have a table here for making database changes (where say you have duplicated data, and you want to change the data, mark everything as stale, and then update them all - marking them fine as you go along)
+	* user database only contains class tables	
+		* CLASSNAME					table that holds all the objects of a certain type
+			* id						the ID of the object
+			* MEMBER					example field-name of a member named "MEMBER". 
+										If this is a primitive, it will hold a value. 
+										If this is a list or object, it will hold an ID. Objects are treated as references - they all start with a null id (note this is not the same as ID 0).
+			* sq_length_LISTMEMBER		stores the length of a member named LISTMEMBER
+
+	* sqool_core		class that provides an interface for adding operations
+						* Operations should always be given back end names
+						* Operations should always get explicit types and never have to introspect classes
+
+
+
+reference http://jeremy.zawodny.com/blog/archives/002194.html in your documentation - "a database abstraction layer even jeremy zawodny can like"
+
+Intro:
+* Sqool (pronounced like "school") is an object-oriented database abstraction layer. Maybe its also ORM (object-relational mapping), but who am I to say?
+
+* Why Sqool doesn't use PDO or ADoDb
+	* PDO doesn't support multi-queries, its that simple. MySQLi provides multiqueries that don't speed up simple queries, but may make multiple consecutive queries MUCH much faster. Without the ability to do a multiquery, all is lost basically. People say multi query is more prone to SQL injection attacks, which is true and not true in different ways. Multi-queries are no more vunlernatble to injection that normal queries, but an attacker can produce a much more powerful and devastating attack if multi-queries are used. In any case, this is simply not a problem with Sqool, because sqool makes sure all calls to the database are properly escaped - so injection attacks are impossible. 
+
+
+
+
+* seems like if you need a unique constraint between columns on joined tables, you'll need to duplicate the data on the new table so the unique constraint is on columns in a single table
+    * If you did this, it would probably make sense to set it up as a foreign key, so 
+    * alernatively, trigers can bet set up http://stackoverflow.com/questions/408749/enforce-unique-values-across-two-tables
+       * There is no index benfit to this though, like there usually is with a unique constraint
+   * This idea should go in the closet - its not needed for the core
